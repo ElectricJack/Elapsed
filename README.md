@@ -6,6 +6,7 @@ Elapsed is a time-lapse capture application for windows and mac written in Proce
 Tested on windows vista x64 & x32, windows xp, mac osx 10.6.3
 
 Notes:
+
 * On mac there should be very few issues with video input, as long as your default capture source is valid.
 * On windows, you need to get winvdig set up. The best way to do this is to follow processing's guide and check if it's working by running on of the examples. Then, once video is working, try running Elapsed.
 
