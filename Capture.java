@@ -43,14 +43,14 @@ public class Capture extends PImage implements Runnable {
 
   // there are more, but these are all we'll provide for now
   // The useful ref page for <a href="http://developer.apple.com/documentation/Java/Reference/1.4.1/Java141API_QTJ/constant-values.html">quicktime constants</a>
-  static public final int COMPOSITE = StdQTConstants.compositeIn;  // 0
-  static public final int SVIDEO = StdQTConstants.sVideoIn;  // 1
-  static public final int COMPONENT = StdQTConstants.rgbComponentIn;  // 2
-  static public final int TUNER = StdQTConstants.tvTunerIn;  // 6
+  static public final int COMPOSITE   = StdQTConstants.compositeIn;     // 0
+  static public final int SVIDEO      = StdQTConstants.sVideoIn;        // 1
+  static public final int COMPONENT   = StdQTConstants.rgbComponentIn;  // 2
+  static public final int TUNER       = StdQTConstants.tvTunerIn;       // 6
 
-  static public final int NTSC = StdQTConstants.ntscIn;
-  static public final int PAL = StdQTConstants.palIn;
-  static public final int SECAM = StdQTConstants.secamIn;
+  static public final int NTSC        = StdQTConstants.ntscIn;
+  static public final int PAL         = StdQTConstants.palIn;
+  static public final int SECAM       = StdQTConstants.secamIn;
 
   // no longer needed because parent field added to PImage
   //PApplet parent;
@@ -155,7 +155,8 @@ public class Capture extends PImage implements Runnable {
 
     try {
       
-
+      //System.out.println( "" + requestWidth + ", " + requestHeight );
+      
       qdrect = new QDRect(requestWidth, requestHeight);
       // workaround for bug with the intel macs
       QDGraphics qdgraphics = null; //new QDGraphics(qdrect);
@@ -167,14 +168,19 @@ public class Capture extends PImage implements Runnable {
 
       capture = new SequenceGrabber();
       capture.setGWorld(qdgraphics, null);
+
       
       try {
-      channel = new SGVideoChannel(capture);
-      channel.setBounds(qdrect);
+        channel = new SGVideoChannel(capture);
+        channel.setBounds(qdrect);
+        channel.setUsage( StdQTConstants.seqGrabPreview );//2   // what is this usage number?
       }
-      catch( StdQTException e ) { e.printStackTrace(); }
-
-      channel.setUsage(2);     // what is this usage number?
+      catch( StdQTException e ) { 
+        e.printStackTrace();
+        return;
+      }
+      
+      //capture.prepare(true, false);
       capture.startPreview();  // maybe this comes later?
 
       PixMap pixmap = qdgraphics.getPixMap();
@@ -195,6 +201,9 @@ public class Capture extends PImage implements Runnable {
         cropW = requestWidth;
         cropH = requestHeight;
       }
+      
+      System.out.println( dataWidth ); 
+      System.out.println( dataHeight );
       // initialize my PImage self
       super.init(requestWidth, requestHeight, RGB);
 
@@ -215,18 +224,18 @@ public class Capture extends PImage implements Runnable {
 
     } catch (QTException qte) {
       //} catch (StdQTException qte) {
-      //qte.printStackTrace();
+      qte.printStackTrace();
 
       int errorCode = qte.errorCode();
       if (errorCode == Errors.couldntGetRequiredComponent) {
         // this can happen when the capture device isn't available
         // or wasn't shut down properly
-        //parent.die("No capture could be found, " + "or the VDIG is not installed correctly.", qte);
+        parent.die("No capture could be found, " + "or the VDIG is not installed correctly.", qte);
       } else {
-        //parent.die("Error while setting up Capture", qte);
+        parent.die("Error while setting up Capture", qte);
       }
     } catch (Exception e) {
-      //parent.die("Error while setting up Capture", e);
+      parent.die("Error while setting up Capture", e);
     }
   }
 
@@ -318,7 +327,7 @@ public class Capture extends PImage implements Runnable {
           destOffset += width;
         }
       } else {  // no crop, just copy directly
-        //System.out.println("read2b");
+        //System.out.println("" + width + ", " + height );
         raw.copyToArray(0, pixels, 0, width * height);
       }
       //System.out.println("read3");
@@ -326,22 +335,26 @@ public class Capture extends PImage implements Runnable {
       available = false;
       // mark this image as modified so that PGraphicsJava2D and
       // PGraphicsOpenGL will properly re-blit and draw this guy
-      updatePixels();
+      //updatePixels();
       //System.out.println("read4");
     }
   }
 
 
   public void run() {
+    
     while ((Thread.currentThread() == runner) && (capture != null)) {
+      //System.out.println("c:run");
       try {
         synchronized (capture) {
           capture.idle();
-          //read();
+          //capture.update(null);
+          read();
           available = true;
 
           if (captureEventMethod != null) {
             try {
+              //System.out.println("precapture");
               captureEventMethod.invoke(parent, new Object[] { this });
             } catch (Exception e) {
               //System.err.println("Disabling captureEvent() for " + name + " because of an error.");
@@ -524,13 +537,13 @@ public class Capture extends PImage implements Runnable {
     } catch (QTException qte) {
       int errorCode = qte.errorCode();
       if (errorCode == Errors.couldntGetRequiredComponent) {
-        //throw new RuntimeException("Couldn't find any capture devices, " + "read the video reference for more info.");
+        throw new RuntimeException("Couldn't find any capture devices, " + "read the video reference for more info.");
       } else {
-        //qte.printStackTrace();
-        //throw new RuntimeException("Problem listing capture devices, " + "read the video reference for more info.");
+        qte.printStackTrace();
+        throw new RuntimeException("Problem listing capture devices, " + "read the video reference for more info.");
       }
     }
-    return null;
+    //return null;
   }
 }
 

@@ -1,41 +1,112 @@
 
-//class CameraHistory {
-//}
-
-class Camera {
+class Camera implements Serializable {
   // cam.format() : Capture.NTSC, Capture.PAL, or Capture.SECAM
   // cam.source() : Capture.TUNER, Capture.COMPOSITE, Capture.SVIDEO, or Capture.COMPONENT
   
-  String     name             = "";
-  Capture    source           = null;  // The capture source being read from
-  Clickable  ui               = null;
-  int        next_image_index = 0;     // The index of the next image filename
+  private String     name             = "";
+  private String     realname         = "";
+  private boolean    active           = true;
+  private int        next_image_index = 0;     // The index of the next image filename
   
-  PImage[]   history          = null;  // A history of thumbnail images of the capture
-  int        history_count    = 0;
-  int        history_index    = 0;  
-  boolean    history_enabled  = true;
+
+  private boolean    history_enabled  = true;
+
   
-  int        resolution       = 1;
-  int        frame_time       = 0;
-  int        last_time        = 0;
+  private int        update_rate      = 30;
+  private int        resolution       = 1;
+  private int        width            = 640;
+  private int        height           = 480;
+  private int        frame_time       = 0;
+
+  
+  public String       getType   ( ) { return "Camera";      }
+  public Serializable clone     ( ) { return new Camera(); }
+  public void         serialize ( Serializer s ) {
+    name             = s.serialize( "name",             name );
+    active           = s.serialize( "active",           active );
+    next_image_index = s.serialize( "next_image_index", next_image_index );
+    history_enabled  = s.serialize( "history_enabled",  history_enabled );
+    resolution       = s.serialize( "resolution",       resolution );   
+    update_rate      = s.serialize( "update_rate",      update_rate );
+    frame_time       = s.serialize( "frame_time",       frame_time );
+    
+    width  = res_widths[resolution];
+    height = res_heights[resolution];
+  }
+  
+  private int        history_count    = 0;
+  private int        history_index    = 0;  
+  private int        last_time        = 0;
+  private PImage[]   history          = null;  // A history of thumbnail images of the capture
+  private Capture    source           = null;  // The capture source being read from
+  private Clickable  ui               = null;
+
+
   
   // ---------------------------------------------------------------------------------------- //
-  public Camera( PApplet parent, String name ) {
-    init( parent, name, 640, 480, 30 );
+  public Camera() {}
+  
+  // ---------------------------------------------------------------------------------------- //
+  public void reconnect( PApplet parent ) {
+    width  = res_widths[resolution];
+    height = res_heights[resolution];
+    unregister( camera_map );
+    history_count = 0;
+    history_index = 0;
+    init( parent, name, width, height, update_rate );
+    register( camera_map );
+  }
+  // ---------------------------------------------------------------------------------------- //
+  public void unregister( HashMap<Capture, Camera> which ) {
+    if( this != null && this.source != null && which != null ) {
+      synchronized( this.source ) {
+        this.source.dispose();
+        synchronized( which ) {
+          which.remove( this.source );
+        }
+        this.source = null;
+      }
+    }
+  }
+  // ---------------------------------------------------------------------------------------- //
+  public void register( HashMap<Capture, Camera> which ) {
+    
+    if( this != null && this.source != null && which != null ) {
+      synchronized( this.source ) {
+        synchronized( which ) {
+          which.put( this.source, this );
+        }
+      }
+    }
+  }
+  // ---------------------------------------------------------------------------------------- //
+  public void init( PApplet parent ) {
+    init( parent, this.name );
+  }
+  // ---------------------------------------------------------------------------------------- //
+  public void init( PApplet parent, String name ) {
+    init( parent, name, res_widths[resolution], res_heights[resolution], update_rate );
+  }
+  // ---------------------------------------------------------------------------------------- //
+  public void init( PApplet parent, String name, int w, int h, int fps ) {
+    
     this.name = name;
     this.ui   = new Clickable( name, true );
     
-    enableHistory(32);
+    if( history_enabled )
+      enableHistory(32);
     
+    try { source = new Capture( parent, w, h, name, fps ); }
+    catch( Exception e ) { println( "Error initializing camera: " + name ); e.printStackTrace(); }
+    catch( Throwable e ) { println( "Error initializing camera: " + name ); e.printStackTrace(); }
   }
   
   public String  getName () { return name; }
   public int     getFrameTime( ) { return frame_times_milis[ frame_time ]; }
   
   // ---------------------------------------------------------------------------------------- //
-  public float   getWidth       ( )                 { if( source != null ) return source.width;  return 0; }
-  public float   getHeight      ( )                 { if( source != null ) return source.height; return 0; }
+  public float   getWidth       ( )                 { return width; }
+  public float   getHeight      ( )                 { return height; }
   public void    disableHistory ( )                 { history_enabled = false; history = null; }
   public void    enableHistory  ( int frame_count ) {
     history_enabled = true;
@@ -44,13 +115,12 @@ class Camera {
   
   
   // ---------------------------------------------------------------------------------------- //
-  public void draw( )                                            { draw( 0, 0, source.width, source.height ); }
+  public void draw( )                                            { draw( 0, 0, getWidth(), getHeight() ); }
   public void draw( float x, float y, float width, float height) {
     if( source != null ) { 
-      
       PImage img = source;
-      if( img != null) {
-        //println( name + " - draw " + width + ", " + height );
+      if( img != null && img.width > 0 && img.height > 0 ) {
+        
         image(img, x, y, width, height );
         
         if( history_count > 0 ) { 
@@ -66,17 +136,13 @@ class Camera {
     }
   }
 
-  // ---------------------------------------------------------------------------------------- //
-  public void register( HashMap<Capture, Camera> which ) {
-    which.put( this.source, this );
-  }
+
   
   // ---------------------------------------------------------------------------------------- //
   public void capture() {
     if( source == null      ) { return; }
-    if( !source.available() ) { return; }
     
-                        source.read();
+                        //source.read();
     PImage        img = source.get();
                   img.resize( 80,  60 );
     this.ui.img = img;
@@ -86,8 +152,11 @@ class Camera {
   public void saveImage() {
     if( source == null )  return;
     
-    PImage frame    = source.get();
-           frame.save( getImagePath( name, next_image_index++ ) );
+    PImage frame = source.get();
+    if( frame != null ) {
+      frame.save( getImagePath( name, next_image_index++ ) );
+    }
+           
     
     if( history_enabled ) {
       frame.resize ( 160, 120  );
@@ -104,21 +173,7 @@ class Camera {
       }
   }
   
-  // ---------------------------------------------------------------------------------------- //
-  public void reconnect( PApplet parent ) {
-    int w = res_widths[resolution];
-    int h = res_heights[resolution];
-    init( parent, name, w, h, 30 );
-    camera_map.put( this.source, this );
-  }
+
   
-  // ---------------------------------------------------------------------------------------- //
-  public void init( PApplet parent, String name, int w, int h, int fps ) {
-    
-    try { source = new Capture( parent, w, h, name, fps ); }
-    catch( Exception e ) { println( "err" ); }
-    catch( Throwable e ) { }
-    
-    this.name = name;
-  }
+
 }

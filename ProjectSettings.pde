@@ -29,7 +29,7 @@ public class ProjectSettings implements Serializable {
   private void initCameras( PApplet parent ) {
     // Called by set active project to init saved camera settings for all cameras
     for( Camera camera : cameras ) {
-      camera.source = null;
+      camera.unregister( camera_map );
     }
   }
   // ---------------------------------------------------------------------------------------- //
